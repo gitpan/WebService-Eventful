@@ -2,16 +2,14 @@ package WebService::Eventful;
 
 =head1 NAME
 
-WebService::Eventful - Perl interface to EVDB public API
+WebService::Eventful - Perl interface to Eventful public API
 
 =head1 SYNOPSIS
 
   use WebService::Eventful;
+  use Data::Dumper;
   
   my $evdb = WebService::Eventful->new(app_key => $app_key);
-  
-  $evdb->login(user => 'harry', password => 'H0gwart$') 
-    or die "Can't log in: $WebService::Eventful::errstr";
   
   # call() accepts either an array ref or a hash ref.
   my $event = $evdb->call('events/get', {id => 'E0-001-000218163-6'})
@@ -24,16 +22,28 @@ WebService::Eventful - Perl interface to EVDB public API
   
   print "Venue: $venue->{name}\n";
 
+  $evdb->setup_Oauth (
+  consumer_key    => "Your_Consumer_Key",
+  consumer_secret => "Your_Consumer_Secret",
+  oauth_token     => "Your_Oauth_Token",
+  oauth_secret    => "Your_Oauth_Token_Secret");
+
+
+my $locs = $evdb->call('users/locales/list' )
+    or die "Can't retrieve user locales : $WebService::Eventful::errstr";
+
+print "Your locations are => " . Dumper ($locs) . "\n";
+
 
 =head1 DESCRIPTION
 
-The Eventful API allows you to build tools and applications that interact with Eventful.  This module provides a Perl interface to that  API, including the digest-based authentication infrastructure.  
+The Eventful API allows you to build tools and applications that interact with Eventful.  This module provides a Perl interface to that API, including oauth authentication .  
 
 See http://api.eventful.com/ for details.
 
-=head1 AUTHOR
+=head1 AUTHORS
 
-Copyright 2006 Eventful, Inc. All rights reserved.
+Copyright 2013 Eventful, Inc. All rights reserved.
 
 You may distribute under the terms of either the GNU General Public License or the Artistic License, as specified in the Perl README file.
 
@@ -54,20 +64,22 @@ use Carp;
 use LWP::UserAgent;
 use HTTP::Request::Common;
 use Digest::MD5 qw(md5_hex);
+use OAuth::Lite::Consumer;
 use Module::Pluggable::Object;
+use Data::Dumper;
 
 =head1 VERSION
 
-1.0 - September 2006
+1.01 - September 2006
 
 =cut
 
-our $VERSION = 1.0;
+our $VERSION = 1.02;
 
 our $VERBOSE = 0;
 our $DEBUG = 0;
 
-our $default_api_server = 'http://api.evdb.com';
+our $default_api_server = 'http://api.eventful.com';
 our $default_flavor = 'rest';
 
 our $errcode;
@@ -100,7 +112,6 @@ sub new
     'app_key'     => $params{app_key} || $params{app_token},
     'debug'       => $params{debug},
     'verbose'     => $params{verbose},
-    'user_key'    => '',
     'api_root'    => $params{api_root} || $default_api_server,
   };
   
@@ -115,6 +126,7 @@ sub new
   $self->{parser} = $self->_find_parser($flavor);
   croak "No parser found for flavor [$flavor]"
     unless $self->{parser};
+
 
   # Create an LWP user agent for later use.
   $self->{user_agent} = LWP::UserAgent->new(
@@ -150,44 +162,35 @@ sub _find_parser
 
 =head1 OBJECT METHODS
 
-=head2 login
+=head2 setup_Oauth
 
-  $evdb->login(user => $username, password => $password);
-  $evdb->login(user => $username, password_md5 => $password_md5);
+  $evdb->setup_Oauth(consumer_key => 'CoNsUmErKey', consumer_secret => 'CoNsUmErSeCrEt', oauth_token => 'AcCeSsToKeN', oauth_secret => 'SeCrEtToKeN');
 
-Retrieves an authentication token from the Eventful API server.
+Sets up the OAuth parameters that will be used to construct the Authorization header with an oauth signature computed on the parameters of the call.
 
 =cut
 
-sub login 
+sub setup_Oauth 
 {
   my $self = shift;
   
   my %args = @_;
-  
-  $self->{user} = $args{user};
-  
-  # Call login to receive a nonce.
-  # (The nonce is stored in an error structure.)
-  $self->call('users/login');
-  my $nonce = $self->{response_data}{nonce} or return;
-  
-  # Generate the digested password response.
-  my $password_md5 = $args{password_md5} || md5_hex($args{password});
-  my $response = md5_hex( $nonce . ":" . $password_md5 );
-  
-  # Send back the nonce and response.
-  my $params = 
-  {
-    nonce => $nonce,
-    response => $response,
-  };
-  
-  my $r = $self->call('users/login', $params) or return;
-  
-  # Store the provided user_key.
-  $self->{user_key} = $r->{user_key} || $r->{auth_token};
-  
+
+# Generate Consumer 
+  my $oauth_consumer = OAuth::Lite::Consumer->new(
+  consumer_key       =>  $args{consumer_key},
+  consumer_secret    =>  $args{consumer_secret},
+  signature_method   => ($args{signature_method} || 'HMAC-SHA1') );
+
+# Generate Token
+  my $oauth_token = OAuth::Lite::Token->new (
+  token  => $args{oauth_token},
+  secret => $args{oauth_secret});
+
+# Save them for when we need to compute the signature when the url is requested in the call.
+  $self->{oauth_consumer} = $oauth_consumer;
+  $self->{oauth_token}    = $oauth_token;
+
   return 1;
 }
 
@@ -209,15 +212,10 @@ sub call
 
   # Remove any leading slash from the method name.
   $method =~ s%^/%%;
-
   # If we have no force_array, see if we have one for this method.
   if ($self->{parser}->flavor eq 'rest' and !$force_array) {
 
-    # The following code is automatically generated.  Edit 
-    #   /main/trunk/evdb/public_api/force_array/force_array.conf 
-    # and run 
-    #   /main/trunk/evdb/public_api/force_array/enforcer
-    # instead.
+    # The following code is automatically generated.  
     # 
     # BEGIN REPLACE
     if($method eq 'calendars/latest/stickers') {
@@ -284,6 +282,10 @@ sub call
       $force_array = ['target'];
     }
 
+    elsif($method eq 'locales/search') {
+      $force_array = ['suggestion'];
+    }
+
     elsif($method eq 'performers/demands/list') {
       $force_array = ['demand'];
     }
@@ -308,16 +310,36 @@ sub call
       $force_array = ['comment'];
     }
 
+    elsif($method eq 'users/demands/list') {
+      $force_array = ['demand', 'event'];
+    }
+
+    elsif($method eq 'users/details/get') {
+      $force_array = ['demand', 'event', 'group', 'link', 'performer', 'venue', 'friend'];
+    }
+
     elsif($method eq 'users/events/recent') {
       $force_array = ['event'];
     }
 
+    elsif($method eq 'users/favorites/tags/list') {
+      $force_array = ['tag'];
+    }
+
+    elsif($method eq 'users/friends/demands/list') {
+      $force_array = ['demand', 'event', 'user'];
+    }
+
     elsif($method eq 'users/get') {
-      $force_array = ['site', 'im_account', 'event', 'venue', 'performer', 'comment', 'trackback', 'calendar', 'locale', 'link', 'event'];
+      $force_array = ['site', 'im_account', 'event', 'venue', 'performer', 'comment', 'trackback', 'calendar', 'locale', 'link', 'event', 'image'];
     }
 
     elsif($method eq 'users/groups/list') {
       $force_array = ['group'];
+    }
+
+    elsif($method eq 'users/performers/demands/list') {
+      $force_array = ['demand'];
     }
 
     elsif($method eq 'users/search') {
@@ -372,12 +394,8 @@ sub call
   }
   
   # Add the standard arguments to the list.
-  foreach my $k ('app_key', 'user', 'user_key')
-  {
-    if ($self->{$k} and !$arg_present->{$k})
-    {
-      push @{$args}, $k, $self->{$k};
-    }
+  if ($self->{app_key} and !$arg_present->{app_key}) {
+    push @{$args}, 'app_key' , $self->{app_key};
   }
   
   # If one of the arguments is a file, set up the Common-friendly 
@@ -412,7 +430,33 @@ sub call
   
   # Fetch the data using the POST method.
   my $ua = $self->{user_agent};
-  
+
+  # If we are doing Oauth authentication then we need to compute the signature/nonce/etc and add them into the query string
+  if (exists $self->{oauth_consumer} ) {
+
+     my %oauth_data;
+     my $jx = 0;
+     #  $content_type = 'form-data';
+     if ($content_type eq 'form-data') {
+      $oauth_data{app_key} = $self->{app_key};
+     } else {
+      %oauth_data = %$arg_present;
+      $oauth_data{app_key} = $self->{app_key};
+     }
+     print "Your oauth params for signature are => " . Dumper (\%oauth_data) . "\n" if ($DEBUG);
+     my $oauth_query = $self->{oauth_consumer}->gen_auth_query('POST', $url, $self->{oauth_token}, \%oauth_data );
+     my $oauth_header = 'OAuth';
+     my $comma = '';
+     foreach my $pair (split ('&',$oauth_query)) {
+       my ($var,$val) = (split ('=',$pair) );
+       $oauth_header .= ($comma . " $var=" . '"' . $val . '"') ;
+       $comma = ',';
+     }
+     print "Oauth added to your url => $oauth_header\n" if ($DEBUG);
+     $ua->default_header('Authorization' => $oauth_header );
+     warn "Your oauth header is => Oauth : $oauth_query\n" if ($DEBUG);
+  }
+
   my $response = $ua->request(POST $url, 
     'Content-type' => $content_type, 
     'Content' => $args,
