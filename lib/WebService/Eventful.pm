@@ -71,10 +71,11 @@ use Data::Dumper;
 =head1 VERSION
 
 1.01 - September 2006
+1.03 - August 2013
 
 =cut
 
-our $VERSION = 1.02;
+our $VERSION = 1.04;
 
 our $VERBOSE = 0;
 our $DEBUG = 0;

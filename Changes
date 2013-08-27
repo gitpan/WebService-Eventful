@@ -1,4 +1,8 @@
 Revision history for WebService::Eventful
+1.03 Aug 2013
+  - Added in new selftest, updated Changes 
+1.02 Aug 2013
+  - Added in support for Oauth authentication.
 
 1.0  Sep 2006
   - Moved modules from EVDB::API to WebService::Eventful namespace.

@@ -19,10 +19,10 @@ Parses XML from the Eventful API.
 =head1 VERSION
 
 1.0 - September 2006
-
+1.04 - August 2013
 =cut
 
-our $VERSION = 1.0;
+our $VERSION = 1.04;
 
 =head1 METHODS
 

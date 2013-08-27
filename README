@@ -4,5 +4,5 @@ interface to that API, including the digest-based authentication infrastructure.
 
 See http://api.eventful.com/ for details.
 
-Copyright 2006 Eventful, Inc.  All rights reserved.  This module may be
+Copyright 2013 Eventful, Inc.  All rights reserved.  This module may be
 redistributed under the same terms as Perl itself.
