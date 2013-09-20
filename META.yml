@@ -6,8 +6,10 @@ version_from:
 installdirs:  site
 requires:
     Carp:                          0
+    Data::Dumper:                  0
     Digest::MD5:                   0.1
     LWP::UserAgent:                0.1
+    Oauth::Lite::Consumer:         0
     Module::Pluggable::Object:     0
     Test::More:                    0
     XML::Simple:                   0.1

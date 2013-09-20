@@ -10,6 +10,8 @@ WriteMakefile(
       'XML::Simple'               => 0.1,
       'LWP::UserAgent'            => 0.1,
       'Module::Pluggable::Object' => 0,
+      'Oauth::Lite::Consumer'     => 0,
+      'Data::Dumper'              => 0,
       'Test::More'                => 0,
     },
 );

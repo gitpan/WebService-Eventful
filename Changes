@@ -1,4 +1,6 @@
 Revision history for WebService::Eventful
+1.05 Sept 2013
+  - Changed the META.yml file to list the Oauth requirements 
 1.03 Aug 2013
   - Added in new selftest, updated Changes 
 1.02 Aug 2013

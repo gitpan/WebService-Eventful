@@ -62,7 +62,6 @@ no warnings qw(uninitialized);
 
 use Carp;
 use LWP::UserAgent;
-use HTTP::Request::Common;
 use Digest::MD5 qw(md5_hex);
 use OAuth::Lite::Consumer;
 use Module::Pluggable::Object;
@@ -72,10 +71,11 @@ use Data::Dumper;
 
 1.01 - September 2006
 1.03 - August 2013
+1.05 - Sept 2013
 
 =cut
 
-our $VERSION = 1.04;
+our $VERSION = 1.05;
 
 our $VERBOSE = 0;
 our $DEBUG = 0;
@@ -372,7 +372,6 @@ sub call
   print "Calling ($url)...\n" if $VERBOSE;
   
   # Pre-process the arguments into a hash (for searching) and an array ref
-  # (to pass on to HTTP::Request::Common).
   my $arg_present = {};
   if (ref($args) eq 'ARRAY')
   {
